@@ -1,4 +1,31 @@
 import pyaudio
+"""
+This script lists all available audio devices and their supported channels using the PyAudio library.
+
+The script performs the following steps:
+1. Initializes the PyAudio instance.
+2. Iterates through all available audio devices.
+3. Prints the name, maximum input channels, and maximum output channels for each device.
+4. Terminates the PyAudio instance.
+
+Dependencies:
+- pyaudio: This library is required to interact with audio devices.
+
+Usage:
+Run this script to get a list of all audio devices and their channel capabilities.
+
+Example:
+    $ python channels.py
+
+Output:
+    Device 0: Device Name
+      Max input channels: X
+      Max output channels: Y
+    Device 1: Device Name
+      Max input channels: X
+      Max output channels: Y
+    ...
+"""
 
 # Initialize PyAudio
 p = pyaudio.PyAudio()
