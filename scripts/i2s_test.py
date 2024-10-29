@@ -5,7 +5,7 @@
 # amixer -c APE cset name="ADMAIF2 Mux" I2S2
 #
 # To test, you can call this from the command line:
-# arecord -D hw:APE,1 -r 48000 -c 2 -f S32_LE output.wav
+# arecord -D hw:APE,1 -r 16000 -c 2 -f S32_LE output.wav
 #
 # Other dependencies: pip install pyalsaaudio
 #                     sudo apt-get install libasound2-dev
@@ -16,7 +16,7 @@ import alsaaudio
 import numpy as np
 
 # Select the device to use (replace 'hw:1,0' if another card/device is correct)
-device = 'hw:APE,1'  # Card 1, Device 0 (ADMAIF1 for I2S input)
+device = 'hw:2,0'  # Card 1, Device 0 (ADMAIF1 for I2S input)
 
 # Configure audio capture parameters
 channels = 2  # Stereo capture
@@ -41,7 +41,7 @@ while True:
         # Convert the byte data into a numpy array for processing
         audio_data = np.frombuffer(data, dtype=np.int32)
 
-        # print(length)
+        print(length)
 
         # print(audio_data)
         num_times +=1
