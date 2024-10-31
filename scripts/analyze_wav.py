@@ -68,10 +68,25 @@ plt.grid()
 plt.tight_layout()
 plt.savefig('fft_result.png')
 
-# Plot the audio data
+# Plot the audio data for the left and right channels
 plt.figure()
-plt.plot(data[:,1][0:1000])
-plt.xlim(0, 1000)
-plt.savefig('audio_data.png')
 
+# Subplot for left channel
+plt.subplot(2, 1, 1)
+plt.title('Audio Data - Left Channel')
+plt.plot(data[:,0][0:1000])
+plt.xlabel('Sample')
+plt.ylabel('Amplitude')
+plt.grid()
+
+# Subplot for right channel
+plt.subplot(2, 1, 2)
+plt.title('Audio Data - Right Channel')
+plt.plot(data[:,1][0:1000])
+plt.xlabel('Sample')
+plt.ylabel('Amplitude')
+plt.grid()
+
+plt.tight_layout()
+plt.savefig('audio_data.png')
 
