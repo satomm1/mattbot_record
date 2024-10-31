@@ -1,8 +1,7 @@
 import rospy
 from std_msgs.msg import UInt8, String
 
-import alsaaudio
-from scipy.io.wavfile import write
+import pyaudio
 import wave
 import whisper
 import numpy as np
@@ -11,15 +10,12 @@ import time
 
 class MicAudio:
 
-    def __init__(self, sample_rate=32000, channels=2, data_format=alsaaudio.PCM_FORMAT_S32_LE, period_size=1024, device='hw:APE,1'):
-
-        self.period_size = period_size
-        self.channels = channels
+    def __init__(self, sample_rate=16000, channels=2, device_index=None):
+        self.p = pyaudio.PyAudio()
+        self.stream = None
         self.sample_rate = sample_rate
-
-        self.pcm = alsaaudio.PCM(alsaaudio.PCM_CAPTURE, alsaaudio.PCM_NORMAL, channels=channels, rate=sample_rate, format=data_format, periodsize=period_size, device=device)
-        
-        # Create an empty list to store the recorded data
+        self.channels = channels
+        self.device_index = device_index
         self.frames = []
 
         self.is_recording = False
@@ -30,8 +26,6 @@ class MicAudio:
 
         self.button_status = 0
         self.button_subscriber = rospy.Subscriber('/button_status', UInt8, self.button_callback, queue_size=1)
-
-        print("Ready to record audio...")
 
     def button_callback(self, msg):
         # See if the LSB is 1 or 0
@@ -45,6 +39,14 @@ class MicAudio:
                 self.is_recording = False          
 
     def record_audio(self):
+        
+        self.stream = self.p.open(format=pyaudio.paInt16,
+                        channels=self.channels,
+                        rate=self.sample_rate,
+                        input=True,
+                        input_device_index=self.device_index,
+                        frames_per_buffer=1024)
+        
         print("Recording...")
         self.frames = []
         self.is_recording = True
@@ -53,26 +55,23 @@ class MicAudio:
     def run(self):
         while not rospy.is_shutdown():
             if self.is_recording and time.time() - self.record_start_time < 10:
-
-                # Read from the PCM input buffer
-                length, data = self.pcm.read()
-
-                if length:
-                    # Reshape data to multi-channel format (if needed)
-                    reshaped_data = np.frombuffer(data, dtype='<i4').reshape(-1, self.channels, order='C')
-
-                    # data is really 24 bit, rescale to be 32 bit
-                    reshaped_data = reshaped_data * 2**12
-
-                    # Append the reshaped data to the frames list
-                    self.frames.append(reshaped_data)
+                data = self.stream.read(1024)
+                self.frames.append(data)
             else:
                 self.is_recording = False     
                 if self.frames:
                     print("Recording finished.")
+                    
+                    # Stop and close the stream
+                    self.stream.stop_stream()
+                    self.stream.close()
 
-                    audio_data = np.concatenate(self.frames)
-                    write("output.wav", self.sample_rate, audio_data)
+                    # Save the recorded data as a WAV file
+                    with wave.open('output.wav', 'wb') as wf:
+                        wf.setnchannels(self.channels)
+                        wf.setsampwidth(self.p.get_sample_size(pyaudio.paInt16))
+                        wf.setframerate(self.sample_rate)
+                        wf.writeframes(b''.join(self.frames))
                     
                     self.frames = None
 
@@ -83,7 +82,7 @@ class MicAudio:
                     print(result["text"])
                     self.audio_input_publisher.publish(result["text"])
 
-            rospy.sleep(1/(self.sample_rate+1000))
+            rospy.sleep(1/17000)
 
 
     def shutdown(self):
@@ -92,7 +91,7 @@ class MicAudio:
 
 if __name__ == '__main__':
     rospy.init_node('mic_audio_node')
-    mic_audio = MicAudio()
+    mic_audio = MicAudio(device_index=0)
     try:
         mic_audio.run()
     except rospy.ROSInterruptException:
