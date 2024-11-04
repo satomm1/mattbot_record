@@ -13,7 +13,10 @@ import sys
 import time
 
 WAKEWORD_TIME = 0.32
-WAKEWORD_MODEL = "alexa_v0.1.tflite"
+# WAKEWORD_MODEL = "alexa_v0.1.tflite"
+# WAKEWORD_KEY = "alexa_v0.1.tflite"
+WAKEWORD_MODEL = "./hey_row_bot.tflite"
+WAKEWORD_KEY = "hey_row_bot"
 
 class MicAudio:
 
@@ -31,6 +34,7 @@ class MicAudio:
         self.idle = True
         self.is_recording = False
         self.is_transcribing = False
+        self.first_wakeword_after_recording = False
 
         self.wakeword_model = Model(wakeword_models=[WAKEWORD_MODEL])
 
@@ -86,7 +90,11 @@ class MicAudio:
                     if total_time >= WAKEWORD_TIME:
                         # Feed the frame into the wakeword model
                         prediction = self.wakeword_model.predict(np.concatenate(wakeword_frames))
-                        if (prediction[WAKEWORD_MODEL] > 0.5):
+                        if self.first_wakeword_after_recording:
+                            # Ignore the first wakeword after recording (it's usually a false positive)
+                            self.first_wakeword_after_recording = False
+
+                        elif (prediction[WAKEWORD_KEY] > 0.5):
                             print("Wakeword detected!")
                             self.idle = False
                         total_time = 0
@@ -113,6 +121,8 @@ class MicAudio:
                         self.is_transcribing = False
                         print(result["text"])
                         self.audio_input_publisher.publish(result["text"])
+
+                        self.first_wakeword_after_recording = True
                         
             rospy.sleep(1/(self.sample_rate+1000))
 
