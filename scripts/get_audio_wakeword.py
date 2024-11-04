@@ -12,6 +12,8 @@ import numpy as np
 import sys
 import time
 
+import requests
+
 WAKEWORD_TIME = 0.32
 # WAKEWORD_MODEL = "alexa_v0.1.tflite"
 # WAKEWORD_KEY = "alexa_v0.1.tflite"
@@ -25,6 +27,8 @@ class MicAudio:
         self.period_size = period_size
         self.channels = channels
         self.sample_rate = sample_rate
+
+        self.url='http://127.0.0.1:5000/gemini'
 
         self.pcm = alsaaudio.PCM(alsaaudio.PCM_CAPTURE, alsaaudio.PCM_NORMAL, channels=channels, rate=sample_rate, format=data_format, periodsize=period_size, device=device)
         
@@ -121,6 +125,11 @@ class MicAudio:
                         self.is_transcribing = False
                         print(result["text"])
                         self.audio_input_publisher.publish(result["text"])
+
+                        data = {'query': result["text"], 'query_type': 'conversation'}
+                        response = requests.post(self.url, json=data)
+                        result = response.json()
+                        print("Response: " + result['response'])
 
                         self.first_wakeword_after_recording = True
                         
