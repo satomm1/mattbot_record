@@ -1,0 +1,12 @@
+<!-- audio.launch -->
+<launch>
+
+  <!-- Specify the package name -->
+  <arg name="package" default="mattbot_audio"/>
+
+  <!-- Launch a node from the package -->
+  <node pkg="$(arg package)" type="get_audio_wakeword.py" name="audio_node" output="screen">
+    <!-- Add any additional node-specific parameters here -->
+  </node>
+
+</launch>
