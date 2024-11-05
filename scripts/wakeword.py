@@ -15,7 +15,7 @@ model = Model(
 )
 
 # Function to record audio using ALSA and feed it into the wakeword model
-def record_and_detect_wakeword(sample_rate=16000, channels=2, data_format=alsaaudio.PCM_FORMAT_S32_LE, period_size=1024, device='hw:APE,1', frame_duration=0.08):
+def record_and_detect_wakeword(sample_rate=16000, channels=2, data_format=alsaaudio.PCM_FORMAT_S32_LE, period_size=1024, device='hw:APE,1', frame_duration=0.32):
     # Set up the ALSA PCM object for capturing audio
     pcm = alsaaudio.PCM(alsaaudio.PCM_CAPTURE, alsaaudio.PCM_NORMAL, channels=channels, rate=sample_rate, format=data_format, periodsize=period_size, device=device)
     
@@ -47,7 +47,7 @@ def record_and_detect_wakeword(sample_rate=16000, channels=2, data_format=alsaau
                 # Feed the frame into the wakeword model
                 prediction = model.predict(np.concatenate(frames))
                 # print(prediction['alexa_v0.1.tflite'])
-                if (prediction['alexa_v0.1.tflite'] > 0.05):
+                if (prediction['alexa_v0.1.tflite'] > 0.5):
                     print("Wakeword detected!")
 
                 total_time = 0
