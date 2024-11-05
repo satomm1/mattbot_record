@@ -50,7 +50,7 @@ def record_audio(duration=5, sample_rate=44100, channels=2, data_format=alsaaudi
             reshaped_data = np.frombuffer(data, dtype='<i4').reshape(-1, channels, order='C')
 
             # data is really 24 bit, rescale to be 32 bit
-            reshaped_data = reshaped_data * 2**12
+            reshaped_data = reshaped_data * 2**14
 
             print("Max Amplitude: ", np.max(np.abs(reshaped_data)))
             audio_data.append(reshaped_data)
