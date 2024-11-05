@@ -17,6 +17,13 @@ import torch
 torch.set_num_threads(1)
 import collections
 
+from silero_vad import (load_silero_vad,
+                          read_audio,
+                          get_speech_timestamps,
+                          save_audio,
+                          VADIterator,
+                          collect_chunks)
+
 WAKEWORD_TIME = 0.32
 # WAKEWORD_MODEL = "alexa_v0.1.tflite"
 # WAKEWORD_KEY = "alexa_v0.1.tflite"
@@ -46,21 +53,19 @@ class MicAudio:
         self.model = whisper.load_model("base.en")
         self.audio_input_publisher = rospy.Publisher('/audio_input', String, queue_size=10)
 
-        self.vad_model, utils = torch.hub.load(repo_or_dir='snakers4/silero-vad',
-                                model='silero_vad',
-                                force_reload=True,
-                                onnx=True)
+        self.vad_model = load_silero_vad(onnx=True)
 
-        (get_speech_timestamps,
-        save_audio,
-        read_audio,
-        VADIterator,
-        collect_chunks) = utils
+        # (get_speech_timestamps,
+        # save_audio,
+        # read_audio,
+        # VADIterator,
+        # collect_chunks) = utils
 
         self.vad_iterator = VADIterator(self.vad_model, sampling_rate=16000)
         self.triggered = False
 
         self.ring_buffer = collections.deque(maxlen=30)
+        self.is_speech = False
 
         self.button_status = 0
         self.button_subscriber = rospy.Subscriber('/button_status', UInt8, self.button_callback, queue_size=1)
@@ -98,6 +103,17 @@ class MicAudio:
             if length:  
                 reshaped_data = np.frombuffer(data, dtype='<i4').reshape(-1, self.channels, order='C')
 
+                speech_data = np.mean(reshaped_data* 2**14, axis=1).astype(np.int32)
+                speech_data = speech_data[::2]
+                speech_dict = self.vad_iterator(speech_data, 16000)
+                if 'start' in speech_dict:
+                    print("Speech detected")
+                    self.is_speech = True
+                elif 'end' in speech_dict:
+                    print("Speech ended")
+                    self.is_speech = False
+                    self.vad_iterator.reset_states()
+
                 
                 if self.idle:  # Detecting wakeword
                     reshaped_data = reshaped_data // 2**4  # Rescale data to be 16 bit
@@ -127,31 +143,21 @@ class MicAudio:
                     
                 else:  # Recording audio
                     # data is really 24 bit, rescale to be 32 bit
-                    reshaped_data = reshaped_data * 2**12
+                    reshaped_data = reshaped_data * 2**14
                     self.frames.append(reshaped_data)
                     total_time += time_per_period
-
-                    # Convert to mono by averaging the channels
-                    mono_data = np.mean(reshaped_data // (2**16), axis=1).astype(np.int16)
-                    # Downsample to 16000 Hz
-                    mono_data = mono_data[::2]
-                    
-                    speech_prob = self.vad_iterator(mono_data, 16000)
 
                     self.counts += 1
 
                     if not self.triggered and self.counts > 10:
-                        if speech_prob:
-                            print("Speech")
+                        if is_speech
                             self.ring_buffer.append(1)
                         else:
                             self.ring_buffer.append(0)
 
                         num_voiced = len([f for f in self.ring_buffer if f])
-                        if num_voiced > 0.5 * len(self.ring_buffer):
+                        if num_voiced > 0.9 * len(self.ring_buffer):
                             self.triggered = True
-                            # self.ring_buffer.clear()
-                            print("Speech detected.")
                             
                         elif total_time >= 3:
                             self.idle = True
@@ -161,9 +167,8 @@ class MicAudio:
                             self.triggered = False
                             self.first_wakeword_after_recording = True
                             self.ring_buffer.clear()
-                            self.vad_iterator.reset_states()
                     elif self.triggered:
-                        if speech_prob:
+                        if is_speech
                             self.ring_buffer.append(1)
                         else:
                             self.ring_buffer.append(0)
@@ -185,7 +190,6 @@ class MicAudio:
 
                             self.first_wakeword_after_recording = True
                             self.triggered = False
-                            self.vad_iterator.reset_states()
 
                     elif total_time >= 8:
                         self.idle = True
@@ -203,7 +207,6 @@ class MicAudio:
 
                         self.first_wakeword_after_recording = True
                         self.triggered = False
-                        self.vad_iterator.reset_states()
                         
             rospy.sleep(1/(self.sample_rate+1000))
 
