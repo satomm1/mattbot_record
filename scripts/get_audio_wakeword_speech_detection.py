@@ -104,12 +104,13 @@ class MicAudio:
                 reshaped_data = np.frombuffer(data, dtype='<i4').reshape(-1, self.channels, order='C')
 
                 speech_data = np.mean(reshaped_data* 2**14, axis=1).astype(np.int32)
-                speech_data = speech_data[::2]
+                speech_data = speech_data[::2] / (2**31)
+                # print(np.max(speech_data), np.min(speech_data))
                 speech_dict = self.vad_iterator(speech_data, 16000)
-                if 'start' in speech_dict:
+                if speech_dict and 'start' in speech_dict:
                     print("Speech detected")
                     self.is_speech = True
-                elif 'end' in speech_dict:
+                elif speech_dict and 'end' in speech_dict:
                     print("Speech ended")
                     self.is_speech = False
                     self.vad_iterator.reset_states()
@@ -150,7 +151,7 @@ class MicAudio:
                     self.counts += 1
 
                     if not self.triggered and self.counts > 10:
-                        if is_speech
+                        if self.is_speech:
                             self.ring_buffer.append(1)
                         else:
                             self.ring_buffer.append(0)
@@ -168,7 +169,7 @@ class MicAudio:
                             self.first_wakeword_after_recording = True
                             self.ring_buffer.clear()
                     elif self.triggered:
-                        if is_speech
+                        if self.is_speech:
                             self.ring_buffer.append(1)
                         else:
                             self.ring_buffer.append(0)
