@@ -96,6 +96,7 @@ class MicAudio:
         total_time = 0
         time_per_period = self.period_size / self.sample_rate
         wakeword_frames = []
+        speech_end_time = time.time()
         self.counts = 0
         while not rospy.is_shutdown():
             length, data = self.pcm.read()
@@ -104,16 +105,18 @@ class MicAudio:
                 reshaped_data = np.frombuffer(data, dtype='<i4').reshape(-1, self.channels, order='C')
 
                 speech_data = np.mean(reshaped_data* 2**14, axis=1).astype(np.int32)
-                speech_data = speech_data[::2] / (2**31)
-                # print(np.max(speech_data), np.min(speech_data))
-                speech_dict = self.vad_iterator(speech_data, 16000)
-                if speech_dict and 'start' in speech_dict:
-                    print("Speech detected")
-                    self.is_speech = True
-                elif speech_dict and 'end' in speech_dict:
-                    print("Speech ended")
-                    self.is_speech = False
-                    self.vad_iterator.reset_states()
+                speech_data = speech_data[::2] / (2**31)  # Downsample to 16000 Hz and rescale to -1 to 1
+
+                if len(speech_data) == 512:
+                    speech_dict = self.vad_iterator(speech_data, 16000)
+                    if speech_dict and 'start' in speech_dict:
+                        print("Speech detected")
+                        self.is_speech = True
+                    elif speech_dict and 'end' in speech_dict:
+                        print("Speech ended")
+                        self.is_speech = False
+                        speech_end_time = time.time()
+                        self.vad_iterator.reset_states()
 
                 
                 if self.idle:  # Detecting wakeword
@@ -150,48 +153,34 @@ class MicAudio:
 
                     self.counts += 1
 
-                    if not self.triggered and self.counts > 10:
-                        if self.is_speech:
-                            self.ring_buffer.append(1)
-                        else:
-                            self.ring_buffer.append(0)
+                    time_since_speech = time.time() - speech_end_time
+                    if not self.triggered and time_since_speech > 1.5:
+                        self.idle = True
+                        total_time = 0
+                        self.frames = []
+                        print("No speech detected.")
+                        self.triggered = False
+                        self.first_wakeword_after_recording = True
+                        self.ring_buffer.clear()
+                    elif not self.triggered and self.counts > 10 and self.is_speech:
+                        self.triggered = True
+                        self.counts = 0
+                    elif self.triggered and not self.is_speech and time_since_speech > 1:
+                        self.idle = True
+                        total_time = 0
+                        audio_data = np.concatenate(self.frames)
+                        write("output.wav", self.sample_rate, audio_data)
+                        self.frames = []
 
-                        num_voiced = len([f for f in self.ring_buffer if f])
-                        if num_voiced > 0.9 * len(self.ring_buffer):
-                            self.triggered = True
-                            
-                        elif total_time >= 3:
-                            self.idle = True
-                            total_time = 0
-                            self.frames = []
-                            print("No speech detected.")
-                            self.triggered = False
-                            self.first_wakeword_after_recording = True
-                            self.ring_buffer.clear()
-                    elif self.triggered:
-                        if self.is_speech:
-                            self.ring_buffer.append(1)
-                        else:
-                            self.ring_buffer.append(0)
+                        print("Transcribing...")
+                        self.is_transcribing = True
+                        result = self.model.transcribe("output.wav")
+                        self.is_transcribing = False
+                        print(result["text"])
+                        self.audio_input_publisher.publish(result["text"])
 
-                        num_unvoiced = len([f for f in self.ring_buffer if not f])
-                        if num_unvoiced > 0.9 * len(self.ring_buffer):
-                            self.idle = True
-                            total_time = 0
-                            audio_data = np.concatenate(self.frames)
-                            write("output.wav", self.sample_rate, audio_data)
-                            self.frames = []
-
-                            print("Transcribing...")
-                            self.is_transcribing = True
-                            result = self.model.transcribe("output.wav")
-                            self.is_transcribing = False
-                            print(result["text"])
-                            self.audio_input_publisher.publish(result["text"])
-
-                            self.first_wakeword_after_recording = True
-                            self.triggered = False
-
+                        self.first_wakeword_after_recording = True
+                        self.triggered = False
                     elif total_time >= 8:
                         self.idle = True
                         total_time = 0
