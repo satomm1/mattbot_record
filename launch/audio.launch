@@ -2,7 +2,7 @@
 <launch>
 
   <!-- Specify the package name -->
-  <arg name="package" default="mattbot_audio"/>
+  <arg name="package" default="mattbot_record"/>
 
   <!-- Launch a node from the package -->
   <node pkg="$(arg package)" type="get_audio_wakeword.py" name="audio_node" output="screen">

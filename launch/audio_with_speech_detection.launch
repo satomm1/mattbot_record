@@ -1,0 +1,16 @@
+<!-- audio_with_speech_detection.launch -->
+<launch>
+
+  <!-- Specify the package name -->
+  <arg name="package" default="mattbot_record"/>
+  <arg name="weights_file" default="$(find mattbot_record)/scripts/hey_row_bot.tflite"/>
+  <arg name="key_name" default="hey_row_bot"/>
+
+  <!-- Launch a node from the package -->
+  <node pkg="$(arg package)" type="get_audio_wakeword_speech_detection.py" name="audio_node" output="screen">
+    <!-- Add any additional node-specific parameters here -->
+    <param name="weights_file" value="$(arg weights_file)" />
+    <param name="key_name" value="$(arg key_name)" />
+  </node>
+
+</launch>

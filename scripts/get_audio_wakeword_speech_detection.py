@@ -27,8 +27,10 @@ from silero_vad import (load_silero_vad,
 WAKEWORD_TIME = 0.32
 # WAKEWORD_MODEL = "alexa_v0.1.tflite"
 # WAKEWORD_KEY = "alexa_v0.1.tflite"
-WAKEWORD_MODEL = "./hey_row_bot.tflite"
-WAKEWORD_KEY = "hey_row_bot"
+# WAKEWORD_MODEL = "./hey_row_bot.tflite"
+# WAKEWORD_KEY = "hey_row_bot"
+
+EXTRA_GAIN = 2**6
 
 class MicAudio:
 
@@ -48,7 +50,10 @@ class MicAudio:
         self.is_transcribing = False
         self.first_wakeword_after_recording = False
 
-        self.wakeword_model = Model(wakeword_models=[WAKEWORD_MODEL])
+        self.wakeword_weights = rospy.get_param('~weights_file',  "./hey_row_bot.tflite")
+        self.wakeword_key = rospy.get_param('~key_name', "hey_row_bot")
+
+        self.wakeword_model = Model(wakeword_models=[self.wakeword_weights])
 
         self.model = whisper.load_model("base.en")
         self.audio_input_publisher = rospy.Publisher('/audio_input', String, queue_size=10)
@@ -103,24 +108,10 @@ class MicAudio:
 
             if length:  
                 reshaped_data = np.frombuffer(data, dtype='<i4').reshape(-1, self.channels, order='C')
-
-                speech_data = np.mean(reshaped_data* 2**14, axis=1).astype(np.int32)
-                speech_data = speech_data[::2] / (2**31)  # Downsample to 16000 Hz and rescale to -1 to 1
-
-                if len(speech_data) == 512:
-                    speech_dict = self.vad_iterator(speech_data, 16000)
-                    if speech_dict and 'start' in speech_dict:
-                        print("Speech detected")
-                        self.is_speech = True
-                    elif speech_dict and 'end' in speech_dict:
-                        print("Speech ended")
-                        self.is_speech = False
-                        speech_end_time = time.time()
-                        self.vad_iterator.reset_states()
-
                 
                 if self.idle:  # Detecting wakeword
-                    reshaped_data = reshaped_data // 2**4  # Rescale data to be 16 bit
+                    # Data is really 24 bit scaled, so rescale to be 16 bit
+                    reshaped_data = reshaped_data // 2**8 * EXTRA_GAIN 
 
                     # Convert to mono by averaging the channels
                     mono_data = np.mean(reshaped_data, axis=1).astype(np.int16)
@@ -138,7 +129,7 @@ class MicAudio:
                             # Ignore the first wakeword after recording (it's usually a false positive)
                             self.first_wakeword_after_recording = False
 
-                        elif (prediction[WAKEWORD_KEY] > 0.5):
+                        elif (prediction[self.wakeword_key] > 0.5):
                             print("Wakeword detected!")
                             self.idle = False
                             self.counts = 0
@@ -146,15 +137,15 @@ class MicAudio:
                         wakeword_frames = []
                     
                 else:  # Recording audio
-                    # data is really 24 bit, rescale to be 32 bit
-                    reshaped_data = reshaped_data * 2**14
+                    # data is really scaled to be 24 bit, rescale to be 32 bit
+                    reshaped_data = reshaped_data * 2**8 * EXTRA_GAIN
                     self.frames.append(reshaped_data)
                     total_time += time_per_period
 
                     self.counts += 1
 
                     time_since_speech = time.time() - speech_end_time
-                    if not self.triggered and time_since_speech > 1.5:
+                    if not self.triggered and time_since_speech > 1.5:  # No speech 
                         self.idle = True
                         total_time = 0
                         self.frames = []
