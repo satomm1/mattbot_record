@@ -6,6 +6,10 @@ Custom PCBs were designed to facilitate the MEMS microphones, PIC32, and connect
 
 The firmware for the PIC32 is located in the `./firmware` directory. This code should be loaded onto the PIC32 and supports sampling rates up to 44,100 Hz.
 
+<img src="./pcb/pcb.jpg" alt="PCB Design" width="25%"/>
+
+I include STL/Solidworks files for mounts for the microphones in the `./mounts` directory. These can be 3D printed. For a gasket, you can use a foam double sided tape found at a hardware store. For an acoustically transparent fabric to protect the port, I used muslin which can be found at a fabric store.
+
 To enable the I2S on the Jetson, enable the I2S functionality via:
 ```
 sudo python3 /opt/nvidia/jetson-io/jetson-io.py
