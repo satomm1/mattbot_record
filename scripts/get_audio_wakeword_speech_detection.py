@@ -108,7 +108,21 @@ class MicAudio:
 
             if length:  
                 reshaped_data = np.frombuffer(data, dtype='<i4').reshape(-1, self.channels, order='C')
-                
+
+                speech_data = np.mean(reshaped_data * 2**8 * EXTRA_GAIN , axis=1).astype(np.int32)
+                speech_data = speech_data[::2] / (2**31)  # Downsample to 16000 Hz and rescale to -1 to 1
+
+                if len(speech_data) == 512:
+                    speech_dict = self.vad_iterator(speech_data, 16000)
+                    if speech_dict and 'start' in speech_dict:
+                        # print("Speech detected")
+                        self.is_speech = True
+                    elif speech_dict and 'end' in speech_dict:
+                        # print("Speech ended")
+                        self.is_speech = False
+                        speech_end_time = time.time()
+                        self.vad_iterator.reset_states()
+
                 if self.idle:  # Detecting wakeword
                     # Data is really 24 bit scaled, so rescale to be 16 bit
                     reshaped_data = reshaped_data // 2**8 * EXTRA_GAIN 
@@ -145,7 +159,7 @@ class MicAudio:
                     self.counts += 1
 
                     time_since_speech = time.time() - speech_end_time
-                    if not self.triggered and time_since_speech > 1.5:  # No speech 
+                    if (not self.triggered) and time_since_speech > 2.5 and not self.is_speech:  # No speech 
                         self.idle = True
                         total_time = 0
                         self.frames = []
@@ -153,7 +167,7 @@ class MicAudio:
                         self.triggered = False
                         self.first_wakeword_after_recording = True
                         self.ring_buffer.clear()
-                    elif not self.triggered and self.counts > 10 and self.is_speech:
+                    elif not self.triggered and self.counts > 5 and self.is_speech:
                         self.triggered = True
                         self.counts = 0
                     elif self.triggered and not self.is_speech and time_since_speech > 1:
@@ -172,7 +186,7 @@ class MicAudio:
 
                         self.first_wakeword_after_recording = True
                         self.triggered = False
-                    elif total_time >= 8:
+                    elif total_time >= 10:
                         self.idle = True
                         total_time = 0
                         audio_data = np.concatenate(self.frames)
