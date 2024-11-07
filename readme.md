@@ -49,3 +49,4 @@ python3 ./scripts/get_audio_wakeword_speech_detection.py
 ```
 This repo is set up as a ROS package compatible with ROS Noetic.
 
+License: MIT
