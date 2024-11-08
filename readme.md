@@ -19,7 +19,7 @@ As a simple test to see if the audio is working, you can use these commands to s
 amixer -c APE cset name="ADMAIF2 Mux" I2S2
 arecord -D hw:APE,1 -r 16000 -c 2 -f S32_LE output.wav
 ```
-It may be necessary to run `python3 ./scripts/channels.py` to determine which audio device to use for the above example. If you find you need to change from `hw:APE,1` to something else, you will need to modify the other python files as well.
+Note, you will need to run the `amixer` command regardless before I2S audio will be read by the Jetson. It may also be necessary to run `python3 ./scripts/channels.py` to determine which audio device to use for the above example. If you find you need to change from `hw:APE,1` to something else, you will need to modify the other python files as well.
 
 To use the I2S on the Nvidia Jetson with Python, you need to make sure you have installed the following packages:
 ```
@@ -39,6 +39,8 @@ pip install openwakeword
 pip install silero-vad
 pip install -U openai-whisper
 ```
+You will also need to download model files for openWakeWord. You can do this with `openwakeword.utils.download_models()` in python, or you can just run `./scripts/wakeword.py` which will also download the necessary model files.
+
 Putting all this together, we create a function which:
 1) Initializes the I2S interface on the Jetson.
 2) Records audio using the I2S interface.
