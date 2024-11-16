@@ -33,11 +33,12 @@ python3 ./scripts/record.py
 ```
 which will save a short 5 second recording to `./scripts/output.wav`. To see the sound in frequency domain, you can run `./scripts/analyze_wav.py`.
 
-We use a wakeword to determine when to start listening. The opensource [openWakeWord](https://github.com/dscripka/openWakeWord) is used to identify "Hey Robot," but the openWakeWord repo describes how to easily create your own wakeword. We also use the opensource [Silero voice activity detector](https://github.com/snakers4/silero-vad) to identify when speech has ended. Speech which is recorded is transcribed using [Whisper](https://github.com/openai/whisper). These features require the installation of additional dependencies:
+We use a wakeword to determine when to start listening. The opensource [openWakeWord](https://github.com/dscripka/openWakeWord) is used to identify "Hey Robot," but the openWakeWord repo describes how to easily create your own wakeword. We also use the opensource [Silero voice activity detector](https://github.com/snakers4/silero-vad) to identify when speech has ended. Speech which is recorded is transcribed using [Whisper](https://github.com/openai/whisper). Recently, the transcription has been changed to [Faster Whisper](https://github.com/SYSTRAN/faster-whisper), which uses less computational resources. These features require the installation of additional dependencies:
 ```
 pip install openwakeword
 pip install silero-vad
 pip install -U openai-whisper
+pip install faster-whisper
 ```
 You will also need to download model files for openWakeWord. You can do this with `openwakeword.utils.download_models()` in python, or you can just run `./scripts/wakeword.py` which will also download the necessary model files.
 

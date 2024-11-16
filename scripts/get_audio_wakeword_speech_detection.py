@@ -7,10 +7,15 @@ from openwakeword.model import Model
 import alsaaudio
 from scipy.io.wavfile import write
 import wave
+
 import whisper
+from faster_whisper import WhisperModel
+
 import numpy as np
 import sys
 import time
+
+import requests
 
 # from silero_vad import SileroVad  # Import Silero VAD
 import torch
@@ -40,6 +45,8 @@ class MicAudio:
         self.channels = channels
         self.sample_rate = sample_rate
 
+        self.url='http://127.0.0.1:5000/gemini'
+
         self.pcm = alsaaudio.PCM(alsaaudio.PCM_CAPTURE, alsaaudio.PCM_NORMAL, channels=channels, rate=sample_rate, format=data_format, periodsize=period_size, device=device)
         
         # Create an empty list to store the recorded data
@@ -55,7 +62,8 @@ class MicAudio:
 
         self.wakeword_model = Model(wakeword_models=[self.wakeword_weights])
 
-        self.model = whisper.load_model("base.en")
+        # self.model = whisper.load_model("base.en")
+        self.model = WhisperModel("tiny.en", device="cpu", compute_type="int8")
         self.audio_input_publisher = rospy.Publisher('/audio_input', String, queue_size=10)
 
         self.vad_model = load_silero_vad(onnx=True)
@@ -145,6 +153,9 @@ class MicAudio:
 
                         elif (prediction[self.wakeword_key] > 0.5):
                             print("Wakeword detected!")
+                            data = {'query': "wakeword", 'query_type': 'wakeword_notification'}
+                            response = requests.post(self.url, json=data)
+
                             self.idle = False
                             self.counts = 0
                         total_time = 0
@@ -164,6 +175,10 @@ class MicAudio:
                         total_time = 0
                         self.frames = []
                         print("No speech detected.")
+                        data = {'query': "no_speech", 'query_type': 'no_speech'}
+                        response = requests.post(self.url, json=data)
+
+
                         self.triggered = False
                         self.first_wakeword_after_recording = True
                         self.ring_buffer.clear()
@@ -179,10 +194,21 @@ class MicAudio:
 
                         print("Transcribing...")
                         self.is_transcribing = True
-                        result = self.model.transcribe("output.wav")
+                        # result = self.model.transcribe("output.wav")
+                        segments, info = self.model.transcribe("output.wav")
                         self.is_transcribing = False
-                        print(result["text"])
-                        self.audio_input_publisher.publish(result["text"])
+                        result = ""
+                        for segment in segments:
+                            result += segment["text"]
+                        # print(result["text"])
+                        print(result)
+                        # self.audio_input_publisher.publish(result["text"])
+                        self.audio_input_publisher.publish(result)
+
+                        data = {'query': result["text"], 'query_type': 'conversation'}
+                        response = requests.post(self.url, json=data)
+                        result = response.json()
+                        print("Response: " + result['response'])
 
                         self.first_wakeword_after_recording = True
                         self.triggered = False
@@ -195,10 +221,21 @@ class MicAudio:
 
                         print("Transcribing...")
                         self.is_transcribing = True
-                        result = self.model.transcribe("output.wav")
+                        # result = self.model.transcribe("output.wav")
+                        segments, info = self.model.transcribe("output.wav")
                         self.is_transcribing = False
-                        print(result["text"])
-                        self.audio_input_publisher.publish(result["text"])
+                        result = ""
+                        for segment in segments:
+                            result += segment["text"]
+                        # print(result["text"])
+                        print(result)
+                        # self.audio_input_publisher.publish(result["text"])
+                        self.audio_input_publisher
+
+                        data = {'query': result["text"], 'query_type': 'conversation'}
+                        response = requests.post(self.url, json=data)
+                        result = response.json()
+                        print("Response: " + result['response'])
 
                         self.first_wakeword_after_recording = True
                         self.triggered = False
