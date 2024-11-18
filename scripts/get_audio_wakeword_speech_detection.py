@@ -153,8 +153,13 @@ class MicAudio:
 
                         elif (prediction[self.wakeword_key] > 0.5):
                             print("Wakeword detected!")
-                            data = {'query': "wakeword", 'query_type': 'wakeword_notification'}
-                            response = requests.post(self.url, json=data)
+                            data = {'query': "wakeword", 'query_type': 'message_to_user'}
+                            try:
+                                response = requests.post(self.url, json=data)
+                                response.raise_for_status()
+                            except requests.exceptions.RequestException as e:
+                                # print(f"Failed to send wakeword notification: {e}")
+                                pass
 
                             self.idle = False
                             self.counts = 0
@@ -175,9 +180,13 @@ class MicAudio:
                         total_time = 0
                         self.frames = []
                         print("No speech detected.")
-                        data = {'query': "no_speech", 'query_type': 'no_speech'}
-                        response = requests.post(self.url, json=data)
+                        data = {'query': "no_speech", 'query_type': 'message_to_user'}
 
+                        try: 
+                            response = requests.post(self.url, json=data)
+                            response.raise_for_status()
+                        except requests.exceptions.RequestException as e:
+                            pass
 
                         self.triggered = False
                         self.first_wakeword_after_recording = True
@@ -191,6 +200,52 @@ class MicAudio:
                         audio_data = np.concatenate(self.frames)
                         write("output.wav", self.sample_rate, audio_data)
                         self.frames = []
+
+                        data = {'query': "processing", 'query_type': 'message_to_user'}
+                        try:
+                            response = requests.post(self.url, json=data)
+                            response.raise_for_status()
+                        except requests.exceptions.RequestException as e:
+                            pass
+
+                        print("Transcribing...")
+                        self.is_transcribing = True
+                        # result = self.model.transcribe("output.wav")
+                        segments, info = self.model.transcribe("output.wav")
+                        self.is_transcribing = False
+                        result = ""
+                        for segment in segments:
+                            result += segment.text
+                        # print(result["text"])
+                        print(result)
+                        # self.audio_input_publisher.publish(result["text"])
+                        self.audio_input_publisher.publish(result)
+
+                        data = {'query': result, 'query_type': 'conversation'}
+
+                        try:
+                            response = requests.post(self.url, json=data)
+                            response.raise_for_status()
+                            result = response.json()
+                            print("Response: " + result['response'])
+                        except requests.exceptions.RequestException as e:
+                            print("Gemini Server not running.")
+
+                        self.first_wakeword_after_recording = True
+                        self.triggered = False
+                    elif total_time >= 10:
+                        self.idle = True
+                        total_time = 0
+                        audio_data = np.concatenate(self.frames)
+                        write("output.wav", self.sample_rate, audio_data)
+                        self.frames = []
+
+                        data = {'query': "processing", 'query_type': 'message_to_user'}
+                        try:
+                            response = requests.post(self.url, json=data)
+                            response.raise_for_status()
+                        except requests.exceptions.RequestException as e:
+                            pass
 
                         print("Transcribing...")
                         self.is_transcribing = True
@@ -206,36 +261,14 @@ class MicAudio:
                         self.audio_input_publisher.publish(result)
 
                         data = {'query': result["text"], 'query_type': 'conversation'}
-                        response = requests.post(self.url, json=data)
-                        result = response.json()
-                        print("Response: " + result['response'])
-
-                        self.first_wakeword_after_recording = True
-                        self.triggered = False
-                    elif total_time >= 10:
-                        self.idle = True
-                        total_time = 0
-                        audio_data = np.concatenate(self.frames)
-                        write("output.wav", self.sample_rate, audio_data)
-                        self.frames = []
-
-                        print("Transcribing...")
-                        self.is_transcribing = True
-                        # result = self.model.transcribe("output.wav")
-                        segments, info = self.model.transcribe("output.wav")
-                        self.is_transcribing = False
-                        result = ""
-                        for segment in segments:
-                            result += segment["text"]
-                        # print(result["text"])
-                        print(result)
-                        # self.audio_input_publisher.publish(result["text"])
-                        self.audio_input_publisher
-
-                        data = {'query': result["text"], 'query_type': 'conversation'}
-                        response = requests.post(self.url, json=data)
-                        result = response.json()
-                        print("Response: " + result['response'])
+                        
+                        try:
+                            response = requests.post(self.url, json=data)
+                            response.raise_for_status()
+                            result = response.json()
+                            print("Response: " + result['response'])
+                        except requests.exceptions.RequestException as e:
+                            print("Gemini Server not running.")
 
                         self.first_wakeword_after_recording = True
                         self.triggered = False
