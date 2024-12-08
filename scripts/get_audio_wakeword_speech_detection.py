@@ -8,7 +8,7 @@ import alsaaudio
 from scipy.io.wavfile import write
 import wave
 
-import whisper
+# import whisper
 from faster_whisper import WhisperModel
 
 import numpy as np

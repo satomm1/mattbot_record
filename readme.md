@@ -40,6 +40,9 @@ pip install silero-vad
 pip install -U openai-whisper
 pip install faster-whisper
 ```
+
+Note: As of 12/7/2024, there is issues with the python package tokenizer version 0.21.0 for faster-whisper. I recommend installing an earlier version.
+
 You will also need to download model files for openWakeWord. You can do this with `openwakeword.utils.download_models()` in python, or you can just run `./scripts/wakeword.py` which will also download the necessary model files.
 
 Putting all this together, we create a function which:
