@@ -1,5 +1,6 @@
 import rospy
 from std_msgs.msg import UInt8, String
+from geometry_msgs.msg import Pose2D
 
 import openwakeword
 from openwakeword.model import Model
@@ -14,6 +15,7 @@ from faster_whisper import WhisperModel
 import numpy as np
 import sys
 import time
+import json
 
 import requests
 
@@ -82,6 +84,8 @@ class MicAudio:
 
         self.button_status = 0
         self.button_subscriber = rospy.Subscriber('/button_status', UInt8, self.button_callback, queue_size=1)
+
+        self.goal_pub = rospy.Publisher('/external_goal', Pose2D, queue_size=10)
 
         print("Ready to record audio...")
 
@@ -228,6 +232,25 @@ class MicAudio:
                             response.raise_for_status()
                             result = response.json()
                             print("Response: " + result['response'])
+
+                            result = json.loads(result['response'])
+                            if isinstance(result, list):
+                                result = result[0]
+                                if isinstance(result, dict):
+                                    if 'success' in result and result['success']:
+                                        x = result['x']
+                                        y = result['y']
+                                        if 'theta' in result:
+                                            theta = result['theta']
+                                        else:
+                                            theta = 0
+                                        print(f"New Goal: x={x}, y={y}, theta={theta}")
+
+                                        goal_msg = Pose2D()
+                                        goal_msg.x = x
+                                        goal_msg.y = y
+                                        goal_msg.theta = theta
+                                        self.goal_pub.publish(goal_msg)
                         except requests.exceptions.RequestException as e:
                             print("Gemini Server not running.")
 
@@ -267,6 +290,25 @@ class MicAudio:
                             response.raise_for_status()
                             result = response.json()
                             print("Response: " + result['response'])
+
+                            result = json.loads(result['response'])
+                            if isinstance(result, list):
+                                result = result[0]
+                                if isinstance(result, dict):
+                                    if 'success' in result and result['success']:
+                                        x = result['x']
+                                        y = result['y']
+                                        if 'theta' in result:
+                                            theta = result['theta']
+                                        else:
+                                            theta = 0
+                                        print(f"New Goal: x={x}, y={y}, theta={theta}")
+
+                                        goal_msg = Pose2D()
+                                        goal_msg.x = x
+                                        goal_msg.y = y
+                                        goal_msg.theta = theta
+                                        self.goal_pub.publish(goal_msg)
                         except requests.exceptions.RequestException as e:
                             print("Gemini Server not running.")
 
