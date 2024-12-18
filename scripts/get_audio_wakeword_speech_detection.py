@@ -85,7 +85,7 @@ class MicAudio:
         self.button_status = 0
         self.button_subscriber = rospy.Subscriber('/button_status', UInt8, self.button_callback, queue_size=1)
 
-        self.goal_pub = rospy.Publisher('/external_goal', Pose2D, queue_size=10)
+        self.goal_pub = rospy.Publisher('/voice_goal', Pose2D, queue_size=10)
 
         print("Ready to record audio...")
 
