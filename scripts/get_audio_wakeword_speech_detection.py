@@ -9,7 +9,6 @@ import alsaaudio
 from scipy.io.wavfile import write
 import wave
 
-# import whisper
 from faster_whisper import WhisperModel
 
 import numpy as np
@@ -19,7 +18,6 @@ import json
 
 import requests
 
-# from silero_vad import SileroVad  # Import Silero VAD
 import torch
 torch.set_num_threads(1)
 import collections
@@ -64,17 +62,10 @@ class MicAudio:
 
         self.wakeword_model = Model(wakeword_models=[self.wakeword_weights])
 
-        # self.model = whisper.load_model("base.en")
         self.model = WhisperModel("tiny.en", device="cpu", compute_type="int8")
         self.audio_input_publisher = rospy.Publisher('/audio_input', String, queue_size=10)
 
         self.vad_model = load_silero_vad(onnx=True)
-
-        # (get_speech_timestamps,
-        # save_audio,
-        # read_audio,
-        # VADIterator,
-        # collect_chunks) = utils
 
         self.vad_iterator = VADIterator(self.vad_model, sampling_rate=16000)
         self.triggered = False
@@ -214,7 +205,6 @@ class MicAudio:
 
                         print("Transcribing...")
                         self.is_transcribing = True
-                        # result = self.model.transcribe("output.wav")
                         segments, info = self.model.transcribe("output.wav")
                         self.is_transcribing = False
                         result = ""
@@ -272,7 +262,6 @@ class MicAudio:
 
                         print("Transcribing...")
                         self.is_transcribing = True
-                        # result = self.model.transcribe("output.wav")
                         segments, info = self.model.transcribe("output.wav")
                         self.is_transcribing = False
                         result = ""
