@@ -59,4 +59,12 @@ python3 ./scripts/get_audio_wakeword_speech_detection.py
 ```
 This repo is set up as a ROS package compatible with ROS Noetic.
 
-License: MIT
+## Launching the Microphones
+The relevant launch file is `audio_with_speech_detection.launch` which can be run with:
+```
+roslaunch mattbot_record audio_with_speech_detection.launch
+```
+
+**Author**: Matthew Sato, Stanford Engineering Informatics Group
+
+**License**: This package is released under an [MIT License](./LICENSE).
