@@ -221,7 +221,7 @@ class MicAudio:
                             response = requests.post(self.url, json=data)
                             response.raise_for_status()
                             result = response.json()
-                            print("Response: " + result['response'])
+                            print("Response: " + result['response']['response'])
 
                             result = json.loads(result['response'])
                             if isinstance(result, list):
@@ -278,7 +278,7 @@ class MicAudio:
                             response = requests.post(self.url, json=data)
                             response.raise_for_status()
                             result = response.json()
-                            print("Response: " + result['response'])
+                            print("Response: " + result['response']['response'])
 
                             result = json.loads(result['response'])
                             if isinstance(result, list):
