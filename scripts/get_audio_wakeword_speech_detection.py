@@ -221,26 +221,30 @@ class MicAudio:
                             response = requests.post(self.url, json=data)
                             response.raise_for_status()
                             result = response.json()
-                            print("Response: " + result['response']['response'])
 
-                            result = json.loads(result['response'])
-                            if isinstance(result, list):
-                                result = result[0]
-                                if isinstance(result, dict):
-                                    if 'success' in result and result['success']:
-                                        x = result['x']
-                                        y = result['y']
-                                        if 'theta' in result:
-                                            theta = result['theta']
-                                        else:
-                                            theta = 0
-                                        print(f"New Goal: x={x}, y={y}, theta={theta}")
+                            response = result['response']
+                            if isinstance(response, list):
+                                print("Response: " + response[0])
+                            elif isinstance(response, str):
+                                result = json.loads(response)
 
-                                        goal_msg = Pose2D()
-                                        goal_msg.x = x
-                                        goal_msg.y = y
-                                        goal_msg.theta = theta
-                                        self.goal_pub.publish(goal_msg)
+                                if isinstance(result, list):
+                                    result = result[0]
+                                    if isinstance(result, dict):
+                                        if 'success' in result and result['success']:
+                                            x = result['x']
+                                            y = result['y']
+                                            if 'theta' in result:
+                                                theta = result['theta']
+                                            else:
+                                                theta = 0
+                                            print(f"New Goal: x={x}, y={y}, theta={theta}")
+
+                                            goal_msg = Pose2D()
+                                            goal_msg.x = x
+                                            goal_msg.y = y
+                                            goal_msg.theta = theta
+                                            self.goal_pub.publish(goal_msg)
                         except requests.exceptions.RequestException as e:
                             print("Gemini Server not running.")
 
