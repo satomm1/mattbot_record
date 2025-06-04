@@ -1,6 +1,6 @@
 import rospy
-from std_msgs.msg import UInt8, String
-from geometry_msgs.msg import Pose2D
+from std_msgs.msg import UInt8, String, Bool
+from geometry_msgs.msg import Pose2D, Twist
 
 import openwakeword
 from openwakeword.model import Model
@@ -76,7 +76,12 @@ class MicAudio:
         self.button_status = 0
         self.button_subscriber = rospy.Subscriber('/button_status', UInt8, self.button_callback, queue_size=1)
 
+        # Subscribe to Robot Velocity Commands
+        self.is_moving = False
+        self.cmd_vel_subscriber = rospy.Subscriber('/cmd_vel', Twist, self.cmd_vel_callback, queue_size=1)
+
         self.goal_pub = rospy.Publisher('/voice_goal', Pose2D, queue_size=10)
+        self.voice_processing_publisher = rospy.Publisher('/voice_processing', Bool, queue_size=10)  # Publisher to indicate voice processing state
 
         print("Ready to record audio...")
 
@@ -89,7 +94,13 @@ class MicAudio:
             if new_button_status == 1 and not self.is_transcribing:
                 self.record_audio()
             else:
-                self.is_recording = False          
+                self.is_recording = False  
+
+    def cmd_vel_callback(self, msg):
+        if msg.linear.x != 0 or msg.angular.z != 0:
+            self.is_moving = True  
+        else:
+            self.is_moving = False      
 
     def record_audio(self):
         print("Recording...")
@@ -108,6 +119,9 @@ class MicAudio:
         self.counts = 0
         while not rospy.is_shutdown():
             length, data = self.pcm.read()
+
+            if self.is_moving:
+                continue  # Skip processing if the robot is moving
 
             if length:  
                 reshaped_data = np.frombuffer(data, dtype='<i4').reshape(-1, self.channels, order='C')
@@ -158,6 +172,8 @@ class MicAudio:
 
                             self.idle = False
                             self.counts = 0
+
+                            self.voice_processing_publisher.publish(True)  # Indicate that voice processing is happening
                         total_time = 0
                         wakeword_frames = []
                     
@@ -186,6 +202,8 @@ class MicAudio:
                         self.triggered = False
                         self.first_wakeword_after_recording = True
                         self.ring_buffer.clear()
+
+                        self.voice_processing_publisher.publish(False)  # Indicate that voice processing is not happening
                     elif not self.triggered and self.counts > 5 and self.is_speech:
                         self.triggered = True
                         self.counts = 0
@@ -250,6 +268,8 @@ class MicAudio:
 
                         self.first_wakeword_after_recording = True
                         self.triggered = False
+
+                        self.voice_processing_publisher.publish(False)  # Indicate that voice processing is not happening
                     elif total_time >= 10:
                         self.idle = True
                         total_time = 0
@@ -307,6 +327,8 @@ class MicAudio:
 
                         self.first_wakeword_after_recording = True
                         self.triggered = False
+
+                        self.voice_processing_publisher.publish(False)  # Indicate that voice processing is not happening
                         
             rospy.sleep(1/(self.sample_rate+1000))
 
