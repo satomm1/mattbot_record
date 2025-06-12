@@ -121,6 +121,7 @@ class MicAudio:
             length, data = self.pcm.read()
 
             if self.is_moving:
+                rospy.sleep(1)
                 continue  # Skip processing if the robot is moving
 
             if length:  
