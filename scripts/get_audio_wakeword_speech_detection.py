@@ -63,7 +63,7 @@ class MicAudio:
         # Download the mel spectrogram model if it doesn't exist
         openwakeword.utils.download_models(model_names=[])
 
-        self.wakeword_model = Model(wakeword_models=[self.wakeword_weights])
+        self.wakeword_model = Model(wakeword_models=[self.wakeword_weights], inference_framework="tflite")
 
         self.model = WhisperModel("tiny.en", device="cpu", compute_type="int8")
         self.audio_input_publisher = rospy.Publisher('/audio_input', String, queue_size=10)
