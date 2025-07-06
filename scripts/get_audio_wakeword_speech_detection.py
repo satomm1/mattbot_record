@@ -37,6 +37,10 @@ WAKEWORD_TIME = 0.32
 
 EXTRA_GAIN = 2**6
 
+LANDMARKS = {"kitchen": [50.7, 20.7, 3.15],
+             "bathroom": [27.8, 30.7, 3.15],
+             "office": [10.6, 3.9, 1.57]}
+
 class MicAudio:
 
     def __init__(self, sample_rate=32000, channels=2, data_format=alsaaudio.PCM_FORMAT_S32_LE, period_size=1024, device='hw:APE,1'):
@@ -249,7 +253,6 @@ class MicAudio:
                                 print("Response: " + response[0])
                             elif isinstance(response, str):
                                 result = json.loads(response)
-
                                 if isinstance(result, list):
                                     result = result[0]
                                     if isinstance(result, dict):
@@ -267,8 +270,19 @@ class MicAudio:
                                             goal_msg.y = y
                                             goal_msg.theta = theta
                                             self.goal_pub.publish(goal_msg)
+                                        elif 'goal' in result and result['goal'] != "None":
+                                            if result['goal'] in LANDMARKS:
+                                                goal_msg = Pose2D()
+                                                goal_msg.x = LANDMARKS[result['goal']][0]
+                                                goal_msg.y = LANDMARKS[result['goal']][1]
+                                                goal_msg.theta = LANDMARKS[result['goal']][2]
+                                                print(f"New Goal: {result['goal']} (x={goal_msg.x}, y={goal_msg.y}, theta={goal_msg.theta})")
+                                                self.goal_pub.publish(goal_msg)
+
                         except requests.exceptions.RequestException as e:
                             print("Gemini Server not running.")
+                        except json.JSONDecodeError as e:
+                            print("Error decoding JSON response from Gemini Server.")
 
                         self.first_wakeword_after_recording = True
                         self.triggered = False
@@ -326,6 +340,15 @@ class MicAudio:
                                         goal_msg.y = y
                                         goal_msg.theta = theta
                                         self.goal_pub.publish(goal_msg)
+                                    elif 'goal' in result and result['goal'] != "None":
+                                            if result['goal'] in LANDMARKS:
+                                                goal_msg = Pose2D()
+                                                goal_msg.x = LANDMARKS[result['goal']][0]
+                                                goal_msg.y = LANDMARKS[result['goal']][1]
+                                                goal_msg.theta = LANDMARKS[result['goal']][2]
+                                                print(f"New Goal: {result['goal']} (x={goal_msg.x}, y={goal_msg.y}, theta={goal_msg.theta})")
+                                                self.goal_pub.publish(goal_msg)
+
                         except requests.exceptions.RequestException as e:
                             print("Gemini Server not running.")
 
