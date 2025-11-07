@@ -90,6 +90,8 @@ class MicAudio:
         self.goal_pub = rospy.Publisher('/voice_goal', Pose2D, queue_size=10)
         self.voice_processing_publisher = rospy.Publisher('/voice_processing', Bool, queue_size=10)  # Publisher to indicate voice processing state
 
+        self.rendezvous_pub = rospy.Publisher('/rendezvous', Bool, queue_size=10)
+
         print("Ready to record audio...")
 
     def button_callback(self, msg):
@@ -278,6 +280,9 @@ class MicAudio:
                                                 goal_msg.theta = LANDMARKS[result['goal']][2]
                                                 print(f"New Goal: {result['goal']} (x={goal_msg.x}, y={goal_msg.y}, theta={goal_msg.theta})")
                                                 self.goal_pub.publish(goal_msg)
+                                            elif result['goal'] == "rendezvous":
+                                                print("Rendezvous command received.")
+                                                self.rendezvous_pub.publish(True)
 
                         except requests.exceptions.RequestException as e:
                             print("Gemini Server not running.")
@@ -348,6 +353,9 @@ class MicAudio:
                                                 goal_msg.theta = LANDMARKS[result['goal']][2]
                                                 print(f"New Goal: {result['goal']} (x={goal_msg.x}, y={goal_msg.y}, theta={goal_msg.theta})")
                                                 self.goal_pub.publish(goal_msg)
+                                            elif result['goal'] == "rendezvous":
+                                                print("Rendezvous command received.")
+                                                self.rendezvous_pub.publish(True)
 
                         except requests.exceptions.RequestException as e:
                             print("Gemini Server not running.")
