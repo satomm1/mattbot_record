@@ -15,6 +15,8 @@ import numpy as np
 import sys
 import time
 import json
+import re
+import subprocess
 
 import requests
 
@@ -41,15 +43,63 @@ LANDMARKS = {"kitchen": [50.7, 20.7, 3.15],
              "bathroom": [27.8, 30.7, 3.15],
              "office": [10.6, 3.9, 1.57]}
 
+
+def _get_admaif_mux_source(admaif, card='APE'):
+    result = subprocess.run(
+        ['amixer', '-c', card, 'get', f'ADMAIF{admaif} Mux'],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        return None
+    match = re.search(r"Item0: '([^']+)'", result.stdout)
+    return match.group(1) if match else None
+
+
+def find_ape_capture_device(i2s_port='I2S2', card='APE', max_admaif=20):
+    for admaif in range(1, max_admaif + 1):
+        if _get_admaif_mux_source(admaif, card=card) == i2s_port:
+            return f'hw:{card},{admaif - 1}'
+    return None
+
+
+def configure_admaif_mux(admaif, i2s_port='I2S2', card='APE'):
+    subprocess.run(
+        ['amixer', '-c', card, 'cset', f'name=ADMAIF{admaif} Mux', i2s_port],
+        check=True,
+    )
+
+
+def resolve_capture_device(device=None, i2s_port='I2S2', card='APE', admaif_fallback=2):
+    if device and device != 'auto':
+        return device
+
+    detected = find_ape_capture_device(i2s_port=i2s_port, card=card)
+    if detected:
+        print(f"Auto-detected ALSA device {detected} (ADMAIF mux -> {i2s_port})")
+        return detected
+
+    configure_admaif_mux(admaif_fallback, i2s_port=i2s_port, card=card)
+    device = f'hw:{card},{admaif_fallback - 1}'
+    print(f"Configured ADMAIF{admaif_fallback} -> {i2s_port}; using ALSA device {device}")
+    return device
+
+
 class MicAudio:
 
-    def __init__(self, sample_rate=32000, channels=2, data_format=alsaaudio.PCM_FORMAT_S32_LE, period_size=1024, device='hw:APE,1'):
+    def __init__(self, sample_rate=32000, channels=2, data_format=alsaaudio.PCM_FORMAT_S32_LE, period_size=1024, device='auto'):
 
         self.period_size = period_size
         self.channels = channels
         self.sample_rate = sample_rate
 
         self.url='http://127.0.0.1:5000/gemini'
+
+        i2s_port = rospy.get_param('~i2s_port', 'I2S2')
+        alsa_device = rospy.get_param('~alsa_device', device)
+        device = resolve_capture_device(device=alsa_device, i2s_port=i2s_port)
+        print(f"Opening ALSA capture device: {device}")
 
         self.pcm = alsaaudio.PCM(alsaaudio.PCM_CAPTURE, alsaaudio.PCM_NORMAL, channels=channels, rate=sample_rate, format=data_format, periodsize=period_size, device=device)
         
