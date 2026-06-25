@@ -65,6 +65,31 @@ The relevant launch file is `audio_with_speech_detection.launch` which can be ru
 roslaunch mattbot_record audio_with_speech_detection.launch
 ```
 
+### Wakeword audio save and upload
+
+When `save_wakeword_audio:=true`, each completed post-wakeword utterance (the WAV sent to Whisper) is written to the **capture spool** as an upload-ready session — same layout as image capture:
+
+```
+{spool_dir}/robot_{ROBOT_ID}/{session_id}/
+  manifest.json
+  utterance.wav
+```
+
+Transcript and audio metadata are stored in `manifest.frames[0].extra`. Requires `ROBOT_ID` in the environment.
+
+| Launch arg | Default | Description |
+|------------|---------|-------------|
+| `save_wakeword_audio` | `false` | Persist wakeword utterances to spool |
+| `spool_dir` | `/workspace/catkin_ws/data/capture_spool` | Shared with `mattbot_capture` |
+
+**Upload:** set `capture:=true` in bringup so `capture_uploader` scans the same spool. Example:
+
+```bash
+roslaunch mattbot_bringup tall.launch audio:=true capture:=true save_wakeword_audio:=true
+```
+
+`no_speech` aborts (wakeword with no following utterance) are not saved.
+
 **Author**: Matthew Sato, Stanford Engineering Informatics Group
 
 **License**: This package is released under an [MIT License](./LICENSE).

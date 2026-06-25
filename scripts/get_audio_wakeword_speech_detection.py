@@ -17,8 +17,11 @@ import time
 import json
 import re
 import subprocess
+import os
 
 import requests
+
+from capture_utils import write_wav_session
 
 import torch
 torch.set_num_threads(1)
@@ -42,6 +45,16 @@ EXTRA_GAIN = 2**6
 LANDMARKS = {"kitchen": [50.7, 20.7, 3.15],
              "bathroom": [27.8, 30.7, 3.15],
              "office": [10.6, 3.9, 1.57]}
+
+
+def _robot_id_from_env():
+    raw = os.environ.get("ROBOT_ID", "").strip()
+    if not raw:
+        return None
+    try:
+        return int(raw)
+    except ValueError:
+        return None
 
 
 def _get_admaif_mux_source(admaif, card='APE'):
@@ -142,6 +155,14 @@ class MicAudio:
 
         self.rendezvous_pub = rospy.Publisher('/rendezvous', Bool, queue_size=10)
 
+        # Persist utterances to capture spool for upload (same layout as image sessions).
+        self.save_wakeword_audio = bool(rospy.get_param("~save_wakeword_audio", False))
+        self.spool_dir = rospy.get_param("~spool_dir", "/workspace/catkin_ws/data/capture_spool")
+        self.robot_id = _robot_id_from_env()
+        if self.save_wakeword_audio and self.robot_id is None:
+            rospy.logwarn("save_wakeword_audio enabled but ROBOT_ID unset; spool writes disabled")
+            self.save_wakeword_audio = False
+
         print("Ready to record audio...")
 
     def button_callback(self, msg):
@@ -168,6 +189,101 @@ class MicAudio:
         self.record_start_time = time.time()
         self.triggered = False
         self.ring_buffer.clear()
+
+    def _handle_gemini_navigation(self, gemini_payload):
+        """Parse Gemini JSON and publish voice_goal or rendezvous if present."""
+        try:
+            response = gemini_payload.get("response")
+            if isinstance(response, list):
+                print("Response: " + response[0])
+                return
+            if isinstance(response, str):
+                parsed = json.loads(response)
+            else:
+                return
+            if isinstance(parsed, list):
+                parsed = parsed[0]
+            if not isinstance(parsed, dict):
+                return
+            if parsed.get("success"):
+                goal_msg = Pose2D()
+                goal_msg.x = parsed["x"]
+                goal_msg.y = parsed["y"]
+                goal_msg.theta = parsed.get("theta", 0)
+                print(f"New Goal: x={goal_msg.x}, y={goal_msg.y}, theta={goal_msg.theta}")
+                self.goal_pub.publish(goal_msg)
+            elif parsed.get("goal") and parsed["goal"] != "None":
+                if parsed["goal"] in LANDMARKS:
+                    goal_msg = Pose2D()
+                    goal_msg.x = LANDMARKS[parsed["goal"]][0]
+                    goal_msg.y = LANDMARKS[parsed["goal"]][1]
+                    goal_msg.theta = LANDMARKS[parsed["goal"]][2]
+                    print(
+                        f"New Goal: {parsed['goal']} (x={goal_msg.x}, y={goal_msg.y}, theta={goal_msg.theta})"
+                    )
+                    self.goal_pub.publish(goal_msg)
+                elif parsed["goal"] == "rendezvous":
+                    print("Rendezvous command received.")
+                    self.rendezvous_pub.publish(True)
+        except (KeyError, TypeError, json.JSONDecodeError) as exc:
+            print(f"Error parsing Gemini navigation response: {exc}")
+
+    def _save_utterance_to_spool(self, transcript: str):
+        if not self.save_wakeword_audio:
+            return
+        try:
+            with open("output.wav", "rb") as handle:
+                wav_bytes = handle.read()
+            session_id = write_wav_session(
+                self.spool_dir,
+                self.robot_id,
+                "wakeword",
+                wav_bytes,
+                transcript=transcript,
+                sample_rate=self.sample_rate,
+                channels=self.channels,
+            )
+            print(f"Saved wakeword audio session={session_id}")
+        except OSError as exc:
+            print(f"Failed to save wakeword audio: {exc}")
+
+    def _finalize_utterance(self, audio_data):
+        """Write WAV, transcribe, optionally spool, POST transcript to Gemini."""
+        write("output.wav", self.sample_rate, audio_data)
+        self.frames = []
+
+        data = {"query": "processing", "query_type": "message_to_user"}
+        try:
+            response = requests.post(self.url, json=data)
+            response.raise_for_status()
+        except requests.exceptions.RequestException:
+            pass
+
+        print("Transcribing...")
+        self.is_transcribing = True
+        segments, _info = self.model.transcribe("output.wav")
+        self.is_transcribing = False
+        transcript = ""
+        for segment in segments:
+            transcript += segment.text
+        print(transcript)
+        self.audio_input_publisher.publish(transcript)
+
+        self._save_utterance_to_spool(transcript)
+
+        data = {"query": transcript, "query_type": "conversation"}
+        try:
+            response = requests.post(self.url, json=data)
+            response.raise_for_status()
+            self._handle_gemini_navigation(response.json())
+        except requests.exceptions.RequestException:
+            print("Gemini Server not running.")
+        except json.JSONDecodeError:
+            print("Error decoding JSON response from Gemini Server.")
+
+        self.first_wakeword_after_recording = True
+        self.triggered = False
+        self.voice_processing_publisher.publish(False)
 
     def run(self):
 
@@ -271,149 +387,12 @@ class MicAudio:
                         self.idle = True
                         total_time = 0
                         audio_data = np.concatenate(self.frames)
-                        write("output.wav", self.sample_rate, audio_data)
-                        self.frames = []
-
-                        data = {'query': "processing", 'query_type': 'message_to_user'}
-                        try:
-                            response = requests.post(self.url, json=data)
-                            response.raise_for_status()
-                        except requests.exceptions.RequestException as e:
-                            pass
-
-                        print("Transcribing...")
-                        self.is_transcribing = True
-                        segments, info = self.model.transcribe("output.wav")
-                        self.is_transcribing = False
-                        result = ""
-                        for segment in segments:
-                            result += segment.text
-                        # print(result["text"])
-                        print(result)
-                        # self.audio_input_publisher.publish(result["text"])
-                        self.audio_input_publisher.publish(result)
-
-                        data = {'query': result, 'query_type': 'conversation'}
-
-                        try:
-                            response = requests.post(self.url, json=data)
-                            response.raise_for_status()
-                            result = response.json()
-
-                            response = result['response']
-                            if isinstance(response, list):
-                                print("Response: " + response[0])
-                            elif isinstance(response, str):
-                                result = json.loads(response)
-                                if isinstance(result, list):
-                                    result = result[0]
-                                    if isinstance(result, dict):
-                                        if 'success' in result and result['success']:
-                                            x = result['x']
-                                            y = result['y']
-                                            if 'theta' in result:
-                                                theta = result['theta']
-                                            else:
-                                                theta = 0
-                                            print(f"New Goal: x={x}, y={y}, theta={theta}")
-
-                                            goal_msg = Pose2D()
-                                            goal_msg.x = x
-                                            goal_msg.y = y
-                                            goal_msg.theta = theta
-                                            self.goal_pub.publish(goal_msg)
-                                        elif 'goal' in result and result['goal'] != "None":
-                                            if result['goal'] in LANDMARKS:
-                                                goal_msg = Pose2D()
-                                                goal_msg.x = LANDMARKS[result['goal']][0]
-                                                goal_msg.y = LANDMARKS[result['goal']][1]
-                                                goal_msg.theta = LANDMARKS[result['goal']][2]
-                                                print(f"New Goal: {result['goal']} (x={goal_msg.x}, y={goal_msg.y}, theta={goal_msg.theta})")
-                                                self.goal_pub.publish(goal_msg)
-                                            elif result['goal'] == "rendezvous":
-                                                print("Rendezvous command received.")
-                                                self.rendezvous_pub.publish(True)
-
-                        except requests.exceptions.RequestException as e:
-                            print("Gemini Server not running.")
-                        except json.JSONDecodeError as e:
-                            print("Error decoding JSON response from Gemini Server.")
-
-                        self.first_wakeword_after_recording = True
-                        self.triggered = False
-
-                        self.voice_processing_publisher.publish(False)  # Indicate that voice processing is not happening
+                        self._finalize_utterance(audio_data)
                     elif total_time >= 10:
                         self.idle = True
                         total_time = 0
                         audio_data = np.concatenate(self.frames)
-                        write("output.wav", self.sample_rate, audio_data)
-                        self.frames = []
-
-                        data = {'query': "processing", 'query_type': 'message_to_user'}
-                        try:
-                            response = requests.post(self.url, json=data)
-                            response.raise_for_status()
-                        except requests.exceptions.RequestException as e:
-                            pass
-
-                        print("Transcribing...")
-                        self.is_transcribing = True
-                        segments, info = self.model.transcribe("output.wav")
-                        self.is_transcribing = False
-                        result = ""
-                        for segment in segments:
-                            result += segment["text"]
-                        # print(result["text"])
-                        print(result)
-                        # self.audio_input_publisher.publish(result["text"])
-                        self.audio_input_publisher.publish(result)
-
-                        data = {'query': result["text"], 'query_type': 'conversation'}
-                        
-                        try:
-                            response = requests.post(self.url, json=data)
-                            response.raise_for_status()
-                            result = response.json()
-                            print("Response: " + result['response']['response'])
-
-                            result = json.loads(result['response'])
-                            if isinstance(result, list):
-                                result = result[0]
-                                if isinstance(result, dict):
-                                    if 'success' in result and result['success']:
-                                        x = result['x']
-                                        y = result['y']
-                                        if 'theta' in result:
-                                            theta = result['theta']
-                                        else:
-                                            theta = 0
-                                        print(f"New Goal: x={x}, y={y}, theta={theta}")
-
-                                        goal_msg = Pose2D()
-                                        goal_msg.x = x
-                                        goal_msg.y = y
-                                        goal_msg.theta = theta
-                                        self.goal_pub.publish(goal_msg)
-                                    elif 'goal' in result and result['goal'] != "None":
-                                            if result['goal'] in LANDMARKS:
-                                                goal_msg = Pose2D()
-                                                goal_msg.x = LANDMARKS[result['goal']][0]
-                                                goal_msg.y = LANDMARKS[result['goal']][1]
-                                                goal_msg.theta = LANDMARKS[result['goal']][2]
-                                                print(f"New Goal: {result['goal']} (x={goal_msg.x}, y={goal_msg.y}, theta={goal_msg.theta})")
-                                                self.goal_pub.publish(goal_msg)
-                                            elif result['goal'] == "rendezvous":
-                                                print("Rendezvous command received.")
-                                                self.rendezvous_pub.publish(True)
-
-                        except requests.exceptions.RequestException as e:
-                            print("Gemini Server not running.")
-
-                        self.first_wakeword_after_recording = True
-                        self.triggered = False
-
-                        self.voice_processing_publisher.publish(False)  # Indicate that voice processing is not happening
+                        self._finalize_utterance(audio_data)
                         
             rospy.sleep(1/(self.sample_rate+1000))
 
