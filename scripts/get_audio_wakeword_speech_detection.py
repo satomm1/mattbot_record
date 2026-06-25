@@ -348,6 +348,7 @@ class MicAudio:
 
                             self.idle = False
                             self.counts = 0
+                            self.recording_start_time = time.time()
 
                             self.voice_processing_publisher.publish(True)  # Indicate that voice processing is happening
                         total_time = 0
@@ -362,7 +363,8 @@ class MicAudio:
                     self.counts += 1
 
                     time_since_speech = time.time() - speech_end_time
-                    if (not self.triggered) and time_since_speech > 2.5 and not self.is_speech:  # No speech 
+                    time_since_recording = time.time() - self.recording_start_time
+                    if (not self.triggered) and time_since_recording > 2.5 and not self.is_speech:  # No speech 
                         self.idle = True
                         total_time = 0
                         self.frames = []
