@@ -1,6 +1,7 @@
 import rospy
 from std_msgs.msg import UInt8, String, Bool
 from geometry_msgs.msg import Pose2D, Twist
+import tf
 
 import openwakeword
 from openwakeword.model import Model
@@ -163,6 +164,9 @@ class MicAudio:
             rospy.logwarn("save_wakeword_audio enabled but ROBOT_ID unset; spool writes disabled")
             self.save_wakeword_audio = False
 
+        if self.save_wakeword_audio:
+            self._tf_listener = tf.TransformListener()
+
         print("Ready to record audio...")
 
     def button_callback(self, msg):
@@ -180,7 +184,22 @@ class MicAudio:
         if msg.linear.x != 0 or msg.angular.z != 0:
             self.is_moving = True  
         else:
-            self.is_moving = False      
+            self.is_moving = False
+
+    def _lookup_pose(self):
+        try:
+            translation, rotation = self._tf_listener.lookupTransform(
+                "map", "base_footprint", rospy.Time(0)
+            )
+            _roll, _pitch, theta = tf.transformations.euler_from_quaternion(rotation)
+            return {
+                "x": translation[0],
+                "y": translation[1],
+                "theta": theta,
+                "frame": "map",
+            }
+        except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
+            return None
 
     def record_audio(self):
         print("Recording...")
@@ -234,6 +253,7 @@ class MicAudio:
         try:
             with open("output.wav", "rb") as handle:
                 wav_bytes = handle.read()
+            pose = self._lookup_pose()
             session_id = write_wav_session(
                 self.spool_dir,
                 self.robot_id,
@@ -242,6 +262,7 @@ class MicAudio:
                 transcript=transcript,
                 sample_rate=self.sample_rate,
                 channels=self.channels,
+                pose=pose,
             )
             print(f"Saved wakeword audio session={session_id}")
         except OSError as exc:
